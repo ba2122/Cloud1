@@ -136,7 +136,7 @@ def create_app(provider, max_workers=1, *, timeout_s=20, allowed_origins=()):
             return {"error": "OCR provider failed"}, 500
 
     async def ocr_endpoint(request):
-        if request.headers.get("Origin") and request.headers["Origin"] not in allowed_origins:
+        if allowed_origins and request.headers.get("Origin") and request.headers["Origin"] not in allowed_origins:
             return web.json_response({"error": "Origin is not allowed"}, status=403)
         try:
             content = await _extract_image_bytes(request)
@@ -148,7 +148,7 @@ def create_app(provider, max_workers=1, *, timeout_s=20, allowed_origins=()):
         return web.json_response(result, status=status)
 
     async def websocket_handler(request):
-        if request.headers.get("Origin") and request.headers["Origin"] not in allowed_origins:
+        if allowed_origins and request.headers.get("Origin") and request.headers["Origin"] not in allowed_origins:
             return web.json_response({"error": "Origin is not allowed"}, status=403)
         socket = web.WebSocketResponse(max_msg_size=MAX_ENVELOPE_BYTES)
         await socket.prepare(request)
@@ -197,16 +197,20 @@ def create_app(provider, max_workers=1, *, timeout_s=20, allowed_origins=()):
 
 def main():
     parser = argparse.ArgumentParser(description="Internal OCR provider; use loopback behind the application API")
-    parser.add_argument("--provider", "-p", default="meikiocr", choices=list(PROVIDER_MAP))
-    parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--provider", "-p", default=os.environ.get("OCR_PROVIDER", "glensv2"), choices=list(PROVIDER_MAP))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8080)))
+    parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--low-bandwidth", action="store_true")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
     provider = load_provider(args.provider, **({"low_bandwidth": args.low_bandwidth} if args.provider == "glensv2" else {}))
-    origins = (f"http://127.0.0.1:{args.port}", f"http://localhost:{args.port}")
+    allowed_env = os.environ.get("ALLOWED_ORIGINS", "")
+    if allowed_env and allowed_env != "*":
+        origins = tuple(filter(None, [item.strip() for item in allowed_env.split(",")]))
+    else:
+        origins = ()
     web.run_app(create_app(provider, args.workers, allowed_origins=origins), host=args.host, port=args.port, access_log=None, print=None)
 
 
