@@ -8,9 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy project definition and install the package + all dependencies
-COPY pyproject.toml README.md ./
-COPY src/ ./src/
+# Built from repository root (Cloud Build default)
+COPY meikipop-ocr-server/pyproject.toml meikipop-ocr-server/README.md ./
+COPY meikipop-ocr-server/src/ ./src/
+
+# Install the package and dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
@@ -21,6 +23,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# glensv2 = Google Lens API (lightweight, no local model needed)
+# Run the server (defaults to glensv2 provider on port 8080)
 ENTRYPOINT ["meikipop-ocr-server"]
 CMD ["--host", "0.0.0.0", "--port", "8080", "--provider", "glensv2"]
